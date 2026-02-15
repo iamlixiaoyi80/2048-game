@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>弹幕射击游戏 - Danmaku Shooter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+        }
+
+        #game-canvas {
+            display: block;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 14px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .stat-box {
+            background: rgba(0,0,0,0.7);
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .controls-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            text-align: center;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-overlay">
+            <div class="stat-box">
+                <div>💖 玩家: <span id="player-hp">100</span> HP</div>
+                <div>⚔️ 敌人: <span id="enemy-hp">100</span> HP</div>
+                <div>🎯 击杀: <span id="kills">0</span></div>
+            </div>
+            <div class="stat-box">
+                <div>🎨 弹幕数: <span id="bullet-count">0</span></div>
+            </div>
+        </div>
+        <div class="controls-hint">
+            WASD/方向键 移动 | 空格 发射弹幕
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <script>
+        class Bullet extends Phaser.GameObjects.Graphics {
+            constructor(scene, x, y, config) {
+                super(scene, x, y);
+
+                this.hp = config.hp || 100;
+                this.attackPower = config.attackPower || 10;
+                this.defensePower = config.defensePower || 5;
+                this.trajectoryType = config.trajectory || 'linear';
+
+                // 飞行轨迹数据
+                this.flightData = {
+                    time: 0,
+                    startX: x,
+                    startY: y,
+                    points: []
+                };
+
+                this.velocity = { x: 0, y: 0 };
+                this.active = true;
+
+                this.drawShape();
+            }
+
+            update(time, delta) {
+                if (!this.active) return;
+
+                this.flightData.time += delta;
+                this.applyTrajectory(delta);
+
+                // 边界检测
+                if (this.x < -100 || this.x > this.scene.scale.width + 100 ||
+                    this.y < -100 || this.y > this.scene.scale.height + 100) {
+                    this.destroy();
+                }
+            }
+
+            applyTrajectory(delta) {
+                switch (this.trajectoryType) {
+                    case 'linear':
+                        this.x += this.velocity.x * delta;
+                        this.y += this.velocity.y * delta;
+                        break;
+                    case 'curve':
+                        // 贝塞尔曲线
+                        const t = Math.min(1, this.flightData.time / 2);
+                        this.x = (1-t)*(1-t)*this.flightData.startX +
+                                  2*(1-t)*t*this.flightData.targetX +
+                                  t*t*this.flightData.targetX;
+                        this.y += this.velocity.y * delta;
+                        break;
+                    case 'spiral':
+                        // 螺旋轨迹
+                        const angle = this.flightData.time * 5;
+                        this.x += Math.cos(angle) * 2;
+                        this.y += Math.sin(angle) * 2;
+                        this.x += this.velocity.x * delta;
+                        this.y += this.velocity.y * delta;
+                        break;
+                    case 'wave':
+                        // 正弦波浪
+                        this.y += Math.sin(this.flightData.time * 10) * 3;
+                        this.x += this.velocity.x * delta;
+                        this.y += this.velocity.y * delta;
+                        break;
+                }
+            }
+
+            drawShape() {
+                this.clear();
+                switch (this.trajectoryType) {
+                    case 'circle':
+                        this.fillCircle(0, 0, 8, 0xff0000ff);
+                        break;
+                    case 'triangle':
+                        this.fillTriangle(0, 0, 8, 0xff00ff00);
+                        break;
+                    case 'star':
+                        this.drawStar(0, 0, 10, 0xffff0000);
+                        break;
+                    case 'diamond':
+                        this.fillDiamond(0, 0, 10, 0xffffff00);
+                        break;
+                    case 'pentagon':
+                        this.drawPentagon(0, 0, 10, 0xff00ffff);
+                        break;
+                }
+            }
+
+            drawStar(cx, cy, radius, color) {
+                this.fillStyle(color, 1);
+                this.beginPath();
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i * 72 - 90) * Math.PI / 180;
+                    const x = cx + Math.cos(angle) * radius;
+                    const y = cy + Math.sin(angle) * radius;
+                    if (i === 0) {
+                        this.moveTo(x, y);
+                    } else {
+                        this.lineTo(x, y);
+                    }
+                }
+                this.closePath();
+                this.fillPath();
+            }
+
+            drawDiamond(cx, cy, radius, color) {
+                this.fillStyle(color, 1);
+                this.beginPath();
+                this.moveTo(cx, cy - radius);
+                this.lineTo(cx + radius, cy);
+                this.lineTo(cx, cy + radius);
+                this.lineTo(cx - radius, cy);
+                this.closePath();
+                this.fillPath();
+            }
+
+            drawPentagon(cx, cy, radius, color) {
+                this.fillStyle(color, 1);
+                this.beginPath();
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i * 72 - 90) * Math.PI / 180;
+                    const x = cx + Math.cos(angle) * radius;
+                    const y = cy + Math.sin(angle) * radius;
+                    if (i === 0) {
+                        this.moveTo(x, y);
+                    } else {
+                        this.lineTo(x, y);
+                    }
+                }
+                this.closePath();
+                this.fillPath();
+            }
+
+            takeDamage(amount) {
+                this.hp -= amount;
+                if (this.hp <= 0) {
+                    this.destroy();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        class DanmakuGame extends Phaser.Scene {
+            constructor() {
+                super('key');
+            }
+
+            create() {
+                // 创建玩家
+                this.player = this.add.graphics();
+                this.player.hp = 100;
+                this.player.x = this.cameras.main.width / 2;
+                this.player.y = this.cameras.main.height - 100;
+                this.player.fillStyle(0x00ff00, 1);
+                this.player.fillCircle(0, 0, 20);
+
+                // 创建敌人
+                this.enemy = this.add.graphics();
+                this.enemy.hp = 100;
+                this.enemy.x = this.cameras.main.width / 2;
+                this.enemy.y = 100;
+                this.enemy.fillStyle(0xff0000, 1);
+                this.enemy.fillCircle(0, 0, 20);
+
+                // 弹幕组
+                this.bullets = this.add.group();
+                this.bulletConfigs = [
+                    { shape: 'circle', trajectory: 'linear', hp: 50, attack: 8, defense: 3 },
+                    { shape: 'triangle', trajectory: 'curve', hp: 80, attack: 15, defense: 5 },
+                    { shape: 'star', trajectory: 'spiral', hp: 120, attack: 20, defense: 8 },
+                    { shape: 'diamond', trajectory: 'wave', hp: 60, attack: 10, defense: 4 },
+                    { shape: 'pentagon', trajectory: 'helix', hp: 100, attack: 12, defense: 6 }
+                ];
+
+                this.bulletCount = 0;
+                this.kills = 0;
+
+                // 键盘控制
+                this.cursors = this.input.keyboard.createCursorKeys();
+                this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+            }
+
+            update() {
+                // 玩家移动
+                const speed = 5;
+                if (this.cursors.left.isDown) {
+                    this.player.x -= speed;
+                }
+                if (this.cursors.right.isDown) {
+                    this.player.x += speed;
+                }
+                if (this.cursors.up.isDown) {
+                    this.player.y -= speed;
+                }
+                if (this.cursors.down.isDown) {
+                    this.player.y += speed;
+                }
+
+                // 发射弹幕
+                if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+                    this.spawnBullet();
+                }
+
+                // 限制玩家在屏幕内
+                this.player.x = Phaser.Math.Clamp(this.player.x, 20, this.cameras.main.width - 20);
+                this.player.y = Phaser.Math.Clamp(this.player.y, 20, this.cameras.main.height - 20);
+
+                // 更新UI
+                document.getElementById('player-hp').textContent = Math.floor(this.player.hp);
+                document.getElementById('enemy-hp').textContent = Math.floor(this.enemy.hp);
+                document.getElementById('bullet-count').textContent = this.bulletCount;
+                document.getElementById('kills').textContent = this.kills;
+            }
+
+            spawnBullet() {
+                // 限制弹幕数
+                if (this.bulletCount > 1000) return;
+
+                // 随机选择弹幕类型
+                const config = Phaser.Math.RND.pick(this.bulletConfigs);
+
+                // 计算发射方向（朝敌人）
+                const angle = Phaser.Math.Angle.Between(
+                    this.player.x,
+                    this.player.y,
+                    this.enemy.x,
+                    this.enemy.y
+                );
+                const speed = Phaser.Math.FloatBetween(300, 500);
+
+                // 创建弹幕
+                const bullet = new Bullet(
+                    this,
+                    this.player.x,
+                    this.player.y,
+                    config
+                );
+                bullet.velocity = {
+                    x: Math.cos(angle) * speed,
+                    y: Math.sin(angle) * speed
+                };
+
+                this.bullets.add(bullet);
+                this.bulletCount++;
+
+                // 简单碰撞检测（距离检查）
+                this.checkCollisions();
+            }
+
+            checkCollisions() {
+                // 玩家弹幕与敌人碰撞
+                this.bullets.children.forEach(bullet => {
+                    if (!bullet.active) return;
+
+                    // 弹幕与敌人碰撞
+                    const distToEnemy = Phaser.Math.Distance.Between(
+                        bullet.x, bullet.y,
+                        this.enemy.x, this.enemy.y
+                    );
+                    if (distToEnemy < 20) {
+                        const damage = Math.max(1, bullet.attackPower - this.enemy.hp * 0.05);
+                        this.enemy.hp -= damage;
+                        bullet.takeDamage(this.enemy.attackPower);
+                        if (!bullet.active) {
+                            this.kills++;
+                        }
+                    }
+
+                    // 玩家与敌人弹幕碰撞
+                    const distToPlayer = Phaser.Math.Distance.Between(
+                        bullet.x, bullet.y,
+                        this.player.x, this.player.y
+                    );
+                    if (distToPlayer < 20) {
+                        const damage = Math.max(1, bullet.attackPower - this.player.hp * 0.05);
+                        this.player.hp -= damage;
+                        bullet.takeDamage(this.player.hp);
+                        if (!bullet.active) {
+                            // 敌人击杀玩家
+                            this.gameOver();
+                        }
+                    }
+                });
+            }
+
+            gameOver() {
+                this.physics.pause();
+                this.add.text(300, 300, '游戏结束！', {
+                    fontSize: '48px',
+                    fill: '#ff0000'
+                });
+                this.time.delayedCall(2000, () => {
+                    this.scene.restart();
+                    this.player.hp = 100;
+                    this.enemy.hp = 100;
+                    this.bullets.clear(true);
+                    this.bulletCount = 0;
+                    this.kills = 0;
+                });
+            }
+        }
+
+        const config = {
+            type: Phaser.AUTO,
+            width: window.innerWidth,
+            height: window.innerHeight,
+            backgroundColor: '#1a1a2e',
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    debug: false
+                }
+            },
+            scene: DanmakuGame
+        };
+
+        const game = new Phaser.Game(config);
+    </script>
+</body>
+</html>
