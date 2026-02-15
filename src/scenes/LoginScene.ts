@@ -154,6 +154,14 @@ export class LoginScene extends Phaser.Scene {
       return;
     }
 
+    // 移除输入框
+    if (this.accountInput) {
+      this.accountInput.remove();
+    }
+    if (this.passwordInput) {
+      this.passwordInput.remove();
+    }
+
     // 检查账号是否为新账号
     const savedData = localStorage.getItem(`danmaku_roguelike_${account}`);
 
@@ -194,16 +202,5 @@ export class LoginScene extends Phaser.Scene {
       // 跳转到主界面
       this.scene.start('StartScene', { account, isNewAccount: false, savedData: data });
     }
-  }
-
-  destroy(): void {
-    // 移除输入框
-    if (this.accountInput) {
-      this.accountInput.remove();
-    }
-    if (this.passwordInput) {
-      this.passwordInput.remove();
-    }
-    super.destroy();
   }
 }
