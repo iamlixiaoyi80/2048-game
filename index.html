@@ -1,15 +1,588 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2048 Game</title>
-    <script>
-        // 自动跳转到游戏
-        window.location.href = '2048-game.html';
-    </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>弹幕肉鸽</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      overflow: hidden;
+      background: #1a1a2e;
+      font-family: Arial, sans-serif;
+    }
+
+    #game-container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #game-canvas {
+      max-width: 100%;
+      max-height: 100%;
+    }
+  </style>
 </head>
 <body>
-    <p>正在跳转到游戏...如果跳转失败，请点击 <a href="2048-game.html">这里</a></p>
+  <div id="game-container"></div>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+  <script>
+    // 登录场景
+    class LoginScene extends Phaser.Scene {
+      constructor() {
+        super({ key: 'LoginScene' });
+      }
+
+      create() {
+        this.cameras.main.setBackgroundColor('#1a1a2e');
+
+        const title = this.add.text(
+          this.scale.width / 2,
+          this.scale.height / 4,
+          '弹幕肉鸽',
+          {
+            fontSize: '64px',
+            color: '#ffd700',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 6
+          }
+        );
+        title.setOrigin(0.5);
+
+        const accountLabel = this.add.text(
+          this.scale.width / 2,
+          this.scale.height / 2 - 120,
+          '账号',
+          {
+            fontSize: '28px',
+            color: '#ffffff'
+          }
+        );
+        accountLabel.setOrigin(0.5);
+
+        const accountInput = document.createElement('input');
+        accountInput.type = 'text';
+        accountInput.id = 'account';
+        accountInput.style.position = 'absolute';
+        accountInput.style.left = `${(this.scale.width / 2) - 150}px`;
+        accountInput.style.top = `${this.scale.height / 2 - 60}px`;
+        accountInput.style.width = '300px';
+        accountInput.style.height = '60px';
+        accountInput.style.fontSize = '24px';
+        accountInput.style.padding = '10px';
+        accountInput.style.border = '3px solid #ffd700';
+        accountInput.style.borderRadius = '10px';
+        accountInput.style.backgroundColor = '#2a1a4a';
+        accountInput.style.color = '#ffffff';
+        accountInput.style.textAlign = 'center';
+        document.body.appendChild(accountInput);
+
+        const passwordLabel = this.add.text(
+          this.scale.width / 2,
+          this.scale.height / 2 + 30,
+          '密码',
+          {
+            fontSize: '28px',
+            color: '#ffffff'
+          }
+        );
+        passwordLabel.setOrigin(0.5);
+
+        const passwordInput = document.createElement('input');
+        passwordInput.type = 'password';
+        passwordInput.id = 'password';
+        passwordInput.style.position = 'absolute';
+        passwordInput.style.left = `${(this.scale.width / 2) - 150}px`;
+        passwordInput.style.top = `${this.scale.height / 2 + 90}px`;
+        passwordInput.style.width = '300px';
+        passwordInput.style.height = '60px';
+        passwordInput.style.fontSize = '24px';
+        passwordInput.style.padding = '10px';
+        passwordInput.style.border = '3px solid #ffd700';
+        passwordInput.style.borderRadius = '10px';
+        passwordInput.style.backgroundColor = '#2a1a4a';
+        passwordInput.style.color = '#ffffff';
+        passwordInput.style.textAlign = 'center';
+        document.body.appendChild(passwordInput);
+
+        const loginButton = this.createButton(
+          this.scale.width / 2,
+          this.scale.height / 2 + 220,
+          '登录',
+          200,
+          80
+        );
+        loginButton.on('pointerdown', () => {
+          const account = accountInput.value;
+          const password = passwordInput.value;
+
+          if (!account || !password) {
+            alert('请输入账号和密码！');
+            return;
+          }
+
+          accountInput.remove();
+          passwordInput.remove();
+
+          const savedData = localStorage.getItem(`danmaku_roguelike_${account}`);
+          if (!savedData) {
+            const accountData = {
+              account,
+              password,
+              createdAt: Date.now(),
+              lastLogin: Date.now()
+            };
+            localStorage.setItem(`danmaku_roguelike_${account}`, JSON.stringify(accountData));
+            this.scene.start('StartScene', { account, isNewAccount: true });
+          } else {
+            const data = JSON.parse(savedData);
+            data.lastLogin = Date.now();
+            localStorage.setItem(`danmaku_roguelike_${account}`, JSON.stringify(data));
+            this.scene.start('StartScene', { account, isNewAccount: false, savedData: data });
+          }
+        });
+      }
+
+      createButton(x, y, text, width, height) {
+        const container = this.add.container(x, y);
+        const buttonBg = this.add.graphics();
+        buttonBg.fillStyle(0xffd700, 1);
+        buttonBg.fillRoundedRect(-width / 2, -height / 2, width, height, 20);
+        const buttonText = this.add.text(0, 0, text, {
+          fontSize: '36px',
+          color: '#1a1a2e',
+          fontStyle: 'bold'
+        });
+        buttonText.setOrigin(0.5);
+        container.add([buttonBg, buttonText]);
+        container.setSize(width, height);
+        container.setInteractive({ useHandCursor: true });
+        return container;
+      }
+    }
+
+    // 主场景
+    class StartScene extends Phaser.Scene {
+      constructor() {
+        super({ key: 'StartScene' });
+      }
+
+      create(data) {
+        this.cameras.main.setBackgroundColor('#1a1a2e');
+
+        const title = this.add.text(
+          this.scale.width / 2,
+          this.scale.height / 4,
+          '弹幕肉鸽',
+          {
+            fontSize: '64px',
+            color: '#ffd700',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 6
+          }
+        );
+        title.setOrigin(0.5);
+
+        if (data.account) {
+          const accountText = this.add.text(
+            this.scale.width / 2,
+            this.scale.height / 3,
+            `欢迎回来，${data.account}！`,
+            {
+              fontSize: '28px',
+              color: '#00aaff'
+            }
+          );
+          accountText.setOrigin(0.5);
+        }
+
+        const newGameButton = this.createButton(
+          this.scale.width / 2,
+          this.scale.height / 2 - 60,
+          '新游戏',
+          250,
+          80
+        );
+        newGameButton.on('pointerdown', () => {
+          this.scene.start('CharacterSelectScene', { account: data.account });
+        });
+
+        const continueGameButton = this.createButton(
+          this.scale.width / 2,
+          this.scale.height / 2 + 100,
+          '继续游戏',
+          250,
+          80
+        );
+        continueGameButton.on('pointerdown', () => {
+          this.scene.start('LevelSelectScene', { account: data.account, savedData: data.savedData });
+        });
+
+        const backButton = this.createButton(
+          60,
+          60,
+          '←',
+          80,
+          50
+        );
+        backButton.on('pointerdown', () => {
+          this.scene.start('LoginScene');
+        });
+      }
+
+      createButton(x, y, text, width, height) {
+        const container = this.add.container(x, y);
+        const buttonBg = this.add.graphics();
+        buttonBg.fillStyle(0xffd700, 1);
+        buttonBg.fillRoundedRect(-width / 2, -height / 2, width, height, 20);
+        const buttonText = this.add.text(0, 0, text, {
+          fontSize: '32px',
+          color: '#1a1a2e',
+          fontStyle: 'bold'
+        });
+        buttonText.setOrigin(0.5);
+        container.add([buttonBg, buttonText]);
+        container.setSize(width, height);
+        container.setInteractive({ useHandCursor: true });
+        return container;
+      }
+    }
+
+    // 人物选择场景
+    class CharacterSelectScene extends Phaser.Scene {
+      constructor() {
+        super({ key: 'CharacterSelectScene' });
+      }
+
+      create(data) {
+        this.cameras.main.setBackgroundColor('#1a1a2e');
+
+        const backButton = this.createButton(
+          60,
+          50,
+          '←',
+          80,
+          50
+        );
+        backButton.on('pointerdown', () => {
+          this.scene.start('StartScene', { account: data.account });
+        });
+
+        const title = this.add.text(
+          this.scale.width / 2,
+          100,
+          '选择人物',
+          {
+            fontSize: '48px',
+            color: '#ffd700',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 4
+          }
+        );
+        title.setOrigin(0.5);
+
+        this.createCharacterList(data.account);
+      }
+
+      createCharacterList(account) {
+        const characterData = [
+          {
+            id: 'sniper',
+            name: '狙击手',
+            race: '人类',
+            profession: '狙击手',
+            talent: '暴击大师',
+            description: '高攻击，远程，暴击+20%',
+            stats: { hp: 80, attack: 20, defense: 5, speed: 3 },
+            color: 0x00ff00
+          },
+          {
+            id: 'heavy',
+            name: '重装兵',
+            race: '兽人',
+            profession: '重装兵',
+            talent: '坚韧',
+            description: '高血量，防御，减伤+20%',
+            stats: { hp: 150, attack: 10, defense: 15, speed: 2 },
+            color: 0xff0000
+          },
+          {
+            id: 'assassin',
+            name: '刺客',
+            race: '精灵',
+            profession: '刺客',
+            talent: '敏捷',
+            description: '高速度，爆发，移速+20%',
+            stats: { hp: 70, attack: 18, defense: 5, speed: 5 },
+            color: 0x00aaff
+          }
+        ];
+
+        const startY = 180;
+        const cardHeight = 250;
+        const gap = 20;
+
+        characterData.forEach((character, index) => {
+          const y = startY + index * (cardHeight + gap);
+          this.createCharacterCard(character, y, account);
+        });
+      }
+
+      createCharacterCard(character, y, account) {
+        const cardWidth = Math.min(this.scale.width - 80, 500);
+        const cardHeight = 220;
+        const cardX = this.scale.width / 2;
+
+        const cardBg = this.add.graphics();
+        cardBg.fillStyle(0x2a1a4a, 1);
+        cardBg.fillRoundedRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 15);
+        cardBg.lineStyle(3, character.color, 1);
+        cardBg.strokeRoundedRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 15);
+
+        const nameText = this.add.text(-cardWidth / 2 + 20, -cardHeight / 2 + 30, character.name, {
+          fontSize: '32px',
+          color: '#ffffff',
+          fontStyle: 'bold'
+        });
+
+        const infoText = this.add.text(-cardWidth / 2 + 20, -cardHeight / 2 + 70, `${character.race} · ${character.profession}`, {
+          fontSize: '20px',
+          color: '#aaaaaa'
+        });
+
+        const talentText = this.add.text(-cardWidth / 2 + 20, -cardHeight / 2 + 100, `天赋: ${character.talent}`, {
+          fontSize: '18px',
+          color: '#ffd700'
+        });
+
+        const descText = this.add.text(-cardWidth / 2 + 20, -cardHeight / 2 + 130, character.description, {
+          fontSize: '16px',
+          color: '#ffffff',
+          wordWrap: { width: cardWidth - 150 }
+        });
+
+        const statsText = this.add.text(-cardWidth / 2 + 20, 0, `HP: ${character.stats.hp}  攻击: ${character.stats.attack}  防御: ${character.stats.defense}  速度: ${character.stats.speed}`, {
+          fontSize: '16px',
+          color: '#ffffff'
+        });
+
+        const selectButton = this.createButton(
+          cardWidth / 2 - 80,
+          0,
+          '选择',
+          120,
+          50
+        );
+        selectButton.on('pointerdown', () => {
+          this.selectCharacter(character, account);
+        });
+
+        const container = this.add.container(cardX, y);
+        container.add([cardBg, nameText, infoText, talentText, descText, statsText, selectButton]);
+      }
+
+      createButton(x, y, text, width, height) {
+        const container = this.add.container(x, y);
+        const buttonBg = this.add.graphics();
+        buttonBg.fillStyle(0xffd700, 1);
+        buttonBg.fillRoundedRect(-width / 2, -height / 2, width, height, 15);
+        const buttonText = this.add.text(0, 0, text, {
+          fontSize: '24px',
+          color: '#1a1a2e',
+          fontStyle: 'bold'
+        });
+        buttonText.setOrigin(0.5);
+        container.add([buttonBg, buttonText]);
+        container.setSize(width, height);
+        container.setInteractive({ useHandCursor: true });
+        return container;
+      }
+
+      selectCharacter(character, account) {
+        const savedData = localStorage.getItem(`danmaku_roguelike_${account}`);
+        if (savedData) {
+          const data = JSON.parse(savedData);
+          data.character = character;
+          localStorage.setItem(`danmaku_roguelike_${account}`, JSON.stringify(data));
+        }
+        this.scene.start('LevelSelectScene', { account, character });
+      }
+    }
+
+    // 关卡选择场景
+    class LevelSelectScene extends Phaser.Scene {
+      constructor() {
+        super({ key: 'LevelSelectScene' });
+      }
+
+      create(data) {
+        this.cameras.main.setBackgroundColor('#1a1a2e');
+
+        const backButton = this.createButton(
+          60,
+          50,
+          '←',
+          80,
+          50
+        );
+        backButton.on('pointerdown', () => {
+          this.scene.start('CharacterSelectScene', { account: data.account });
+        });
+
+        const title = this.add.text(
+          this.scale.width / 2,
+          100,
+          '选择关卡',
+          {
+            fontSize: '48px',
+            color: '#ffd700',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 4
+          }
+        );
+        title.setOrigin(0.5);
+
+        this.createLevelList(data.account, data.character);
+      }
+
+      createLevelList(account, character) {
+        const levelData = [
+          {
+            id: 1,
+            name: '新手村外围',
+            description: '适合新手的简单关卡',
+            enemyTypes: '史莱姆、哥布林、野狼',
+            waveCount: 5,
+            color: 0x00ff00
+          },
+          {
+            id: 2,
+            name: '魔法森林',
+            description: '有魔法元素的神秘森林',
+            enemyTypes: '森林精灵、树精、魔法花朵',
+            waveCount: 5,
+            color: 0x00aaff
+          },
+          {
+            id: 3,
+            name: '沙漠遗迹',
+            description: '炎热沙漠中的古老遗迹',
+            enemyTypes: '沙虫、木乃伊、沙蝎',
+            waveCount: 5,
+            color: 0xffaa00
+          }
+        ];
+
+        const startY = 180;
+        const cardHeight = 200;
+        const gap = 20;
+
+        levelData.forEach((level, index) => {
+          const y = startY + index * (cardHeight + gap);
+          this.createLevelCard(level, y, account, character);
+        });
+      }
+
+      createLevelCard(level, y, account, character) {
+        const cardWidth = Math.min(this.scale.width - 80, 500);
+        const cardHeight = 180;
+        const cardX = this.scale.width / 2;
+
+        const cardBg = this.add.graphics();
+        cardBg.fillStyle(0x2a1a4a, 1);
+        cardBg.fillRoundedRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 15);
+        cardBg.lineStyle(3, level.color, 1);
+        cardBg.strokeRoundedRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 15);
+
+        const nameText = this.add.text(-cardWidth / 2 + 20, -cardHeight / 2 + 30, `关卡 ${level.id}: ${level.name}`, {
+          fontSize: '28px',
+          color: '#ffffff',
+          fontStyle: 'bold'
+        });
+
+        const descText = this.add.text(-cardWidth / 2 + 20, -cardHeight / 2 + 70, level.description, {
+          fontSize: '18px',
+          color: '#aaaaaa'
+        });
+
+        const enemyText = this.add.text(-cardWidth / 2 + 20, -cardHeight / 2 + 100, `敌人: ${level.enemyTypes}`, {
+          fontSize: '16px',
+          color: '#ffffff'
+        });
+
+        const waveText = this.add.text(-cardWidth / 2 + 20, -cardHeight / 2 + 130, `波数: ${level.waveCount}`, {
+          fontSize: '16px',
+          color: '#ffffff'
+        });
+
+        const startButton = this.createButton(
+          cardWidth / 2 - 80,
+          0,
+          '开始',
+          120,
+          50
+        );
+        startButton.on('pointerdown', () => {
+          alert(`即将开始关卡 ${level.id}: ${level.name}`);
+        });
+
+        const container = this.add.container(cardX, y);
+        container.add([cardBg, nameText, descText, enemyText, waveText, startButton]);
+      }
+
+      createButton(x, y, text, width, height) {
+        const container = this.add.container(x, y);
+        const buttonBg = this.add.graphics();
+        buttonBg.fillStyle(0xffd700, 1);
+        buttonBg.fillRoundedRect(-width / 2, -height / 2, width, height, 15);
+        const buttonText = this.add.text(0, 0, text, {
+          fontSize: '24px',
+          color: '#1a1a2e',
+          fontStyle: 'bold'
+        });
+        buttonText.setOrigin(0.5);
+        container.add([buttonBg, buttonText]);
+        container.setSize(width, height);
+        container.setInteractive({ useHandCursor: true });
+        return container;
+      }
+    }
+
+    // 游戏配置
+    const config = {
+      type: Phaser.AUTO,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      backgroundColor: '#1a1a2e',
+      parent: 'game-container',
+      scene: [LoginScene, StartScene, CharacterSelectScene, LevelSelectScene],
+      physics: {
+        default: 'arcade',
+        arcade: {
+          debug: false,
+          gravity: { x: 0, y: 0 }
+        }
+      },
+      scale: {
+        mode: Phaser.Scale.RESIZE,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+      }
+    };
+
+    // 启动游戏
+    new Phaser.Game(config);
+  </script>
 </body>
 </html>
