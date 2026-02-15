@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>弹幕肉鸽</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      overflow: hidden;
+      background: #1a1a2e;
+      font-family: Arial, sans-serif;
+    }
+
+    #game-container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+</head>
+<body>
+  <div id="game-container"></div>
+  <script>
+    // 游戏配置
+    const config = {
+      type: Phaser.AUTO,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      backgroundColor: '#1a1a2e',
+      parent: 'game-container',
+      physics: {
+        default: 'arcade',
+        arcade: {
+          debug: false,
+          gravity: { x: 0, y: 0 }
+        }
+      },
+      scale: {
+        mode: Phaser.Scale.RESIZE,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+      },
+      scene: {}
+    };
+
+    // 启动游戏
+    const game = new Phaser.Game(config);
+
+    // 添加游戏说明场景
+    game.scene.add('Intro', {
+      create: function() {
+        this.cameras.main.setBackgroundColor('#1a1a2e');
+        
+        const title = this.add.text(
+          this.scale.width / 2,
+          this.scale.height / 3,
+          '🎮 弹幕肉鸽',
+          {
+            fontSize: '64px',
+            color: '#ffd700',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 4
+          }
+        );
+        title.setOrigin(0.5);
+
+        const subtitle = this.add.text(
+          this.scale.width / 2,
+          this.scale.height / 2,
+          '游戏正在加载...',
+          {
+            fontSize: '24px',
+            color: '#00aaff'
+          }
+        );
+        subtitle.setOrigin(0.5);
+
+        const info = this.add.text(
+          this.scale.width / 2,
+          this.scale.height * 2/3,
+          '请稍等或刷新页面',
+          {
+            fontSize: '18px',
+            color: '#ffffff'
+          }
+        );
+        info.setOrigin(0.5);
+      }
+    });
+
+    game.scene.start('Intro');
+  </script>
+</body>
+</html>
