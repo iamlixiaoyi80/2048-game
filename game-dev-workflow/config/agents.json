@@ -1,0 +1,74 @@
+{
+  "agents": {
+    "default": "codex",
+    "options": {
+      "codex": {
+        "model": "gpt-5.2-codex",
+        "autoApprove": false,
+        "pty": true,
+        "workdir": "./"
+      },
+      "claude": {
+        "model": "claude-3.5-sonnet",
+        "pty": true
+      }
+    }
+  },
+  "testing": {
+    "coverageThreshold": 80,
+    "framework": "unity-test-runner",
+    "autoRun": true,
+    "testTypes": ["unit", "integration", "performance"]
+  },
+  "ci_cd": {
+    "platform": "unity",
+    "autoDeploy": {
+      "dev": true,
+      "staging": true,
+      "production": false
+    },
+    "notifications": {
+      "enabled": true,
+      "channels": ["feishu"],
+      "onSuccess": true,
+      "onFailure": true
+    }
+  },
+  "deployment": {
+    "environments": {
+      "dev": {
+        "url": "http://dev.yourgame.com",
+        "path": "/var/dev/games/",
+        "backup": true
+      },
+      "staging": {
+        "url": "http://staging.yourgame.com",
+        "path": "/var/staging/games/",
+        "backup": true
+      },
+      "production": {
+        "url": "http://yourgame.com",
+        "path": "/var/www/games/",
+        "backup": true,
+        "requiresApproval": true
+      }
+    }
+  },
+  "notifications": {
+    "cron": {
+      "dailyTest": "09:00",
+      "weeklyReview": "Friday 16:00",
+      "deploymentAlert": true
+    },
+    "channels": {
+      "feishu": {
+        "enabled": true,
+        "user": "ou_57e1b3d63f8cc8296b20754115608075"
+      },
+      "github": {
+        "enabled": true,
+        "repo": "your-username/your-game"
+      }
+    }
+  }
+}

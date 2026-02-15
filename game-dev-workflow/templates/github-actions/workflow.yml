@@ -1,0 +1,248 @@
+name: Game CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '部署环境'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+
+env:
+  UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+  UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+  UNITY_VERSION: 2023.2.0f1
+
+jobs:
+  # 构建任务
+  build:
+    name: Build for ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [StandaloneWindows64, StandaloneOSX, StandaloneLinux64]
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+
+    - name: Cache Unity Library
+      uses: actions/cache@v3
+      with:
+        path: Library
+        key: Library-${{ matrix.target }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+        restore-keys: |
+          Library-${{ matrix.target }}-
+
+    - name: Activate Unity License
+      uses: game-ci/unity-activate@v2
+      with:
+        license: ${{ secrets.UNITY_LICENSE }}
+
+    - name: Build Game
+      uses: game-ci/unity-builder@v2
+      with:
+        targetPlatform: ${{ matrix.target }}
+        buildName: MyGame-${{ matrix.target }}
+        buildsPath: build
+        versioning: Semantic
+
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: Build-${{ matrix.target }}
+        path: build
+
+  # 测试任务
+  test:
+    name: Run Test Suite
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Activate Unity License
+      uses: game-ci/unity-activate@v2
+
+    - name: Run Unity Tests
+      uses: game-ci/unity-test-runner@v2
+      with:
+        testMode: all
+        artifactsPath: TestResults
+        coverageOptions: 'generateAdditionalMetrics;generateHtmlReport;generateCoberturaReport'
+
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: Test Results
+        path: TestResults
+
+    - name: Check Coverage
+      run: |
+        # 检查测试覆盖率是否达标（80%）
+        echo "检查测试覆盖率..."
+        if [ -f TestResults/*.cobertura.xml ]; then
+          COVERAGE=$(find TestResults -name "*.cobertura.xml" -exec grep -oP 'line-rate="\K[0-9.]+' {} \; | head -1)
+          echo "当前覆盖率: ${COVERAGE}"
+          COV_NUM=$(echo "$COVERAGE" | awk '{printf "%d", $1 * 100}')
+          if [ $COV_NUM -lt 80 ]; then
+            echo "❌ 覆盖率低于80%阈值"
+            exit 1
+          else
+            echo "✅ 覆盖率达标"
+          fi
+        fi
+
+  # 代码质量检查
+  lint:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Linters
+      run: |
+        npm install -g eslint
+        npm install -g csharpier
+
+    - name: Run Linters
+      run: |
+        # 检查C#代码格式
+        find Assets -name "*.cs" -exec dotnet-csharpier --check {} +
+
+        # 检查JavaScript代码（如果有）
+        find Assets -name "*.js" -exec eslint {} +
+
+  # 部署任务
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+    - name: Download Build Artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: Build-StandaloneWindows64
+
+    - name: Prepare Deployment
+      run: |
+        echo "准备部署到 ${{ inputs.environment }} 环境"
+
+        # 根据环境设置变量
+        case "${{ inputs.environment }}" in
+          dev)
+            DEPLOY_PATH="/var/dev/games/"
+            ;;
+          staging)
+            DEPLOY_PATH="/var/staging/games/"
+            ;;
+          production)
+            DEPLOY_PATH="/var/www/games/"
+            ;;
+        esac
+
+        echo "部署路径: $DEPLOY_PATH"
+
+    - name: Deploy to Server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.DEPLOY_HOST }}
+        username: ${{ secrets.DEPLOY_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          # 备份当前版本
+          BACKUP_DIR="${{ secrets.DEPLOY_PATH }}backup.$(date +%Y%m%d_%H%M%S)"
+          cp -r ${{ secrets.DEPLOY_PATH }} $BACKUP_DIR
+
+          # 部署新版本
+          rm -rf ${{ secrets.DEPLOY_PATH }}*
+          cp -r MyGame-StandaloneWindows64/* ${{ secrets.DEPLOY_PATH }}
+
+          # 清理旧备份（保留5个）
+          ls -td ${{ secrets.DEPLOY_PATH }}backup.* | tail -n +6 | xargs rm -rf
+
+    - name: Health Check
+      run: |
+        # 等待服务启动
+        sleep 10
+
+        # 健康检查
+        case "${{ inputs.environment }}" in
+          dev)
+            curl -f http://dev.yourgame.com/health || exit 1
+            ;;
+          staging)
+            curl -f http://staging.yourgame.com/health || exit 1
+            ;;
+          production)
+            curl -f https://yourgame.com/health || exit 1
+            ;;
+        esac
+
+        echo "✅ 健康检查通过"
+
+    - name: Notify Success
+      if: success()
+      run: |
+        echo "🎉 部署成功到 ${{ inputs.environment }}"
+        # 使用cron发送通知（需要clawdbot支持）
+        # clawdbot cron wake --text "游戏已部署到${{ inputs.environment }}" --mode now
+
+    - name: Notify Failure
+      if: failure()
+      run: |
+        echo "❌ 部署失败"
+        # clawdbot cron wake --text "部署到${{ inputs.environment }}失败，请检查" --mode now
+
+  # 性能测试
+  performance:
+    name: Performance Test
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    if: github.event_name == 'workflow_dispatch' && inputs.environment == 'staging'
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Download Build Artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: Build-StandaloneWindows64
+
+    - name: Setup Performance Testing
+      run: |
+        # 安装性能测试工具
+        npm install -g lighthouse
+
+        # 运行性能测试
+        echo "运行性能测试..."
+
+    - name: Upload Performance Report
+      uses: actions/upload-artifact@v3
+      with:
+        name: Performance Report
+        path: lighthouse-report.html
