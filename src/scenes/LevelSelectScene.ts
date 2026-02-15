@@ -186,7 +186,11 @@ export class LevelSelectScene extends Phaser.Scene {
   }
 
   private startLevel(level: any, account: string, character: any): void {
-    // TODO: 跳转到游戏场景
-    alert(`即将开始关卡 ${level.id}: ${level.name}`);
+    // 跳转到游戏场景
+    this.scene.start('GameScene', {
+      account: account,
+      character: character,
+      level: level
+    });
   }
 }

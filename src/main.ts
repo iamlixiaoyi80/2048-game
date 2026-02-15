@@ -3,6 +3,7 @@ import { LoginScene } from './scenes/LoginScene';
 import { StartScene } from './scenes/StartScene';
 import { CharacterSelectScene } from './scenes/CharacterSelectScene';
 import { LevelSelectScene } from './scenes/LevelSelectScene';
+import { GameScene } from './scenes/GameScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -10,7 +11,7 @@ const config: Phaser.Types.Core.GameConfig = {
   height: window.innerHeight,
   backgroundColor: '#1a1a2e',
   parent: 'game-container',
-  scene: [LoginScene, StartScene, CharacterSelectScene, LevelSelectScene],
+  scene: [LoginScene, StartScene, CharacterSelectScene, LevelSelectScene, GameScene],
   physics: {
     default: 'arcade',
     arcade: {
